@@ -1,0 +1,147 @@
+DNS configuration in RHEL 7
+===============================================================================================================
+Iptables should be stop and selinux should be disable. if both are on need to be configure 
+iptabels and selinux.
+
+allow default DNS port 53.
+
+firewall-cmd --permanent --add-port=53/tcp
+firewall-cmd --permanent --add-port=53/udp
+firewall-cmd --reload
+
+Configure Selinux.
+
+chgrp named -R /var/named
+chown -v root:named /etc/named.conf
+restorecon -rv /var/named
+restorecon /etc/named.conf
+====================================================================================================================
+
+yum install bind bind-utils -y
+
+[root@puppetagent1 ~]# cat /etc/named.conf
+//
+// named.conf
+//
+// Provided by Red Hat bind package to configure the ISC BIND named(8) DNS
+// server as a caching only nameserver (as a localhost DNS resolver only).
+//
+// See /usr/share/doc/bind*/sample/ for example named configuration files.
+//
+
+options {
+        listen-on port 53 { 127.0.0.1; 192.168.9.202; };
+        listen-on-v6 port 53 { ::1; };
+        directory       "/var/named";
+        dump-file       "/var/named/data/cache_dump.db";
+        statistics-file "/var/named/data/named_stats.txt";
+        memstatistics-file "/var/named/data/named_mem_stats.txt";
+        allow-query     { localhost; 192.168.9.0/24;};
+
+        /*
+         - If you are building an AUTHORITATIVE DNS server, do NOT enable recursion.
+         - If you are building a RECURSIVE (caching) DNS server, you need to enable
+           recursion.
+         - If your recursive DNS server has a public IP address, you MUST enable access
+           control to limit queries to your legitimate users. Failing to do so will
+           cause your server to become part of large scale DNS amplification
+           attacks. Implementing BCP38 within your network would greatly
+           reduce such attack surface
+        */
+        recursion yes;
+
+        dnssec-enable yes;
+        dnssec-validation yes;
+        dnssec-lookaside auto;
+
+        /* Path to ISC DLV key */
+        bindkeys-file "/etc/named.iscdlv.key";
+
+        managed-keys-directory "/var/named/dynamic";
+
+        pid-file "/run/named/named.pid";
+        session-keyfile "/run/named/session.key";
+};
+
+logging {
+        channel default_debug {
+                file "data/named.run";
+                severity dynamic;
+        };
+};
+
+zone "." IN {
+        type hint;
+        file "named.ca";
+};
+
+zone "example.com" IN {
+type master;
+file "forward.example";
+allow-update { none; };
+};
+zone "9.168.192.in-addr.arpa" IN {
+type master;
+file "reverse.example";
+allow-update { none; };
+};
+
+include "/etc/named.rfc1912.zones";
+include "/etc/named.root.key";
+===============================================================
+[root@puppetagent1 ~]# cat /var/named/forward.example
+$TTL 86400
+@   IN  SOA     puppetagent1.example.com. root.example.com. (
+        2011071001  ;Serial
+        3600        ;Refresh
+        1800        ;Retry
+        604800      ;Expire
+        86400       ;Minimum TTL
+)
+@       IN  NS          puppetagent1.example.com.
+@       IN  A           192.168.9.202
+@       IN  A           192.168.9.201
+@       IN  A           192.168.9.100
+@       IN  A           192.168.9.101
+@       IN  A           192.168.9.102
+@       IN  A           192.168.9.103
+puppetagent1    IN A 192.168.9.202
+nn1         IN  A   192.168.9.100
+dn1         IN  A   192.168.9.101
+dn2         IN  A   192.168.9.102
+dn3         IN  A   192.168.9.103
+puppetmaster        IN  A   192.168.9.201
+[root@puppetagent1 ~]#
+=======================================================
+[root@puppetagent1 ~]# cat /var/named/reverse.example
+$TTL 86400
+@   IN  SOA     puppetagent1.example.com. root.example.com. (
+        2011071001  ;Serial
+        3600        ;Refresh
+        1800        ;Retry
+        604800      ;Expire
+        86400       ;Minimum TTL
+)
+@       IN  NS          puppentagent1.example.com.
+@       IN  PTR         example.com.
+puppetagent1       IN  A   192.168.9.202
+201     IN  PTR         puppetagent1.example.com.
+202     IN  PTR         puppetmaster.example.com.
+100     IN  PTR         nn1.example.com.
+101     IN  PTR         dn1.example.com.
+102     IN  PTR         dn2.example.com.
+103     IN  PTR         dn3.example.com.
+[root@puppetagent1 ~]#
+==============================================================
+Test DNS configuration and zone files.
+[root@puppetagent1 ~]# named-checkconf /etc/named.conf
+[root@puppetagent1 ~]# named-checkzone example.com /var/named/forward.example
+zone example.com/IN: loaded serial 2011071001
+OK
+[root@puppetagent1 ~]# named-checkzone example.com /var/named/reverse.example
+zone example.com/IN: loaded serial 2011071001
+OK
+[root@puppetagent1 ~]#
+===================================================================
+
+
