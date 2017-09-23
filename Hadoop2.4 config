@@ -116,3 +116,67 @@ copy all yarn-site.xml and mapred-site.xml configure in all datanodes and start 
 yarn-daemon.sh start nodemanager
 =======================================================================
  for i in 192.168.9.{101,102,103}; do ssh $i '/usr/java/jdk1.8.0_144/bin/jps; hostname'; echo " "; done;
+ for i in 192.168.9.{101,102,103}; do ssh $i '/usr/java/jdk1.8.0_144/bin/jps; hostname'; echo " "; done;
+ 
+yarn jar hadoop/share/mapreduce/hadoop-mapreduce-examples-2.4.0.jar wordcount /input /output
+for i in 192.168.9.{101,102,103}; do ssh $i 'hostname; /usr/java/jdk1.8.0_144/bin/jps;echo " "; done; 
+
+yarn jar hadoop/share/mapreduce/hadoop-mapreduce-examples-2.4.0.jar pai 4 6
+========================================================
+http://blog.csdn.net/asd315861547/article/details/56276945
+
+hive metastore in durby but it not in production we use mysql.
+hadoopp and hive application connect through some connector called hcatlog.
+
+download the hive extract it (client machine) add/set path in .bash_profile
+#vi hive/conf/hive-default.xml  (copy or cnage the name of hive-default-templete file)
+first create location where hive will create our metadata.
+#hadoop fs -ls /
+#hadoop fs -mkdir -p /user/hive/warehouse
+#vi hive-default.xml
+<name>hive.metastore.warehouse.dir</name>
+<value>/user/hive/warehouse</value>
+change the ownership of above directory.
+#hadoop fs -chmod g_w /user/hive/warehouse (group--write permission)
+write some data:-
+
+hadoop fs -ls /user/hive/warehouse
+
+run hive. (sometime it showing this error:- Exception in thread "main" java.lang.RuntimeException: 
+org.apache.hadoop.hive.ql.metadata.HiveException: java.lang.RuntimeException: 
+Unable to instantiate org.apache.hadoop.hive.ql.metadata.SessionHiveMetaStoreClient)
+
+delete metastore_db directroy and derby.log.
+
+[hadoop@client1 ~]$ rm -rf metastore_db/
+[hadoop@client1 ~]$ rm -rf derby.log
+
+[hadoop@client1 ~]$ schematool -dbType derby -initSchema    ( run this command)
+which: no hbase in (/home/hadoop/hive/bin:/home/hadoop/hadoop/bin/:/home/hadoop/hadoop/sbin/:/usr/java/jdk1.8.0_144/bin/:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/hadoop/.local/bin:/home/hadoop/bin)
+Metastore connection URL:        jdbc:derby:;databaseName=metastore_db;create=true
+Metastore Connection Driver :    org.apache.derby.jdbc.EmbeddedDriver
+Metastore connection User:       APP
+Starting metastore schema initialization to 2.1.0
+Initialization script hive-schema-2.1.0.derby.sql
+Initialization script completed
+schemaTool completed
+[hadoop@client1 ~]$ hive     ( run again hive command)
+which: no hbase in (/home/hadoop/hive/bin:/home/hadoop/hadoop/bin/:/home/hadoop/hadoop/sbin/:/usr/java/jdk1.8.0_144/bin/:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/hadoop/.local/bin:/home/hadoop/bin)
+
+Logging initialized using configuration in jar:file:/home/hadoop/hive/lib/hive-common-2.1.1.jar!/hive-log4j2.properties Async: true
+Hive-on-MR is deprecated in Hive 2 and may not be available in the future versions. Consider using a different execution engine (i.e. spark, tez) or using Hive 1.X releases.
+hive> [hadoop@client1 ~]$
+
+hive>show databases
+create database test;
+use test;
+CREATE TABLE POKES (foo INT, bar STRING);
+LOAD DATA LOCAL INPATH '.hive/examples/kv1.txt' OVERWRITE INTO TABLE pokes;
+select * from pokes;
+quit
+
+
+
+
+
+ 
