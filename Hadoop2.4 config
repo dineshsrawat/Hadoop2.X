@@ -136,12 +136,15 @@ first create location where hive will create our metadata.
 #vi hive-default.xml
 <name>hive.metastore.warehouse.dir</name>
 <value>/user/hive/warehouse</value>
-change the ownership of above directory.
-#hadoop fs -chmod g_w /user/hive/warehouse (group--write permission)
+change the ownership directory.
+#hadoop fs -chmod g+w /user/hive/warehouse (group--write permission)
+#hdfs dfs -chmod g+w /tmp
 write some data:-
 
 hadoop fs -ls /user/hive/warehouse
 
+Note:-
+*******************************************************************************************************
 run hive. (sometime it showing this error:- Exception in thread "main" java.lang.RuntimeException: 
 org.apache.hadoop.hive.ql.metadata.HiveException: java.lang.RuntimeException: 
 Unable to instantiate org.apache.hadoop.hive.ql.metadata.SessionHiveMetaStoreClient)
@@ -160,23 +163,402 @@ Starting metastore schema initialization to 2.1.0
 Initialization script hive-schema-2.1.0.derby.sql
 Initialization script completed
 schemaTool completed
+**********************************************************************************************************
 [hadoop@client1 ~]$ hive     ( run again hive command)
 which: no hbase in (/home/hadoop/hive/bin:/home/hadoop/hadoop/bin/:/home/hadoop/hadoop/sbin/:/usr/java/jdk1.8.0_144/bin/:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/hadoop/.local/bin:/home/hadoop/bin)
 
 Logging initialized using configuration in jar:file:/home/hadoop/hive/lib/hive-common-2.1.1.jar!/hive-log4j2.properties Async: true
 Hive-on-MR is deprecated in Hive 2 and may not be available in the future versions. Consider using a different execution engine (i.e. spark, tez) or using Hive 1.X releases.
-hive> [hadoop@client1 ~]$
+hive>
 
 hive>show databases
 create database test;
 use test;
 CREATE TABLE POKES (foo INT, bar STRING);
+LOAD DATA LOCAL INPATH '/home/hadoop/hive/examples/files/kv01.txt' OVERWRITE INTO TABLE pokes;
+select * from pokes;
+Drop a Table and Database
+--------------------------------------
+show databases;
+drop database test; --- not delete
+use test;
+show tables;
+drop table pokes;
+drop database test;
+=====================================================================================================================
+data will not delete from hdfs only delete from metastore_db
+
+hive>show databases
+create database test;
+use test;
+CREATE EXTERNAL TABLE POKES (foo INT, bar STRING);
 LOAD DATA LOCAL INPATH '.hive/examples/kv1.txt' OVERWRITE INTO TABLE pokes;
 select * from pokes;
-quit
+drop table pokes;
+Table will delete from local metastore_db but not delete from hdfs
+===================================================================
+we can direct copy file in /usr/hive/warehouse/test.db/pokes  --- will use this approch when our database file is big (in TB and PB)
+hive> create database test;
+use test;
+create table pokes (foo INT, bar STRING);
+select * from pokes;
 
-
-
-
-
+===========================================================
+IN PRODUCATION HOW WE USE HIVE.
+Clear everything (derby.log and metastore_db) delete from hdfs side also.
+Hive usign mysql database.
+install mysql connector and mysql.
+===========================================================================
+ first download the MySQL.
+ go to https://dev.mysql.com/downloads/repo/yum/
  
+ Download the repo RPM first (mysql57-community-release-el7-9.noarch.rpm)and copy in client machine where you install MySQL.
+scp to windows machine to linux machine
+
+ [hadoop@client1 ~]$ sudo rpm -ivh mysql57-community-release-el7-11.noarch.rpm
+warning: mysql57-community-release-el7-11.noarch.rpm: Header V3 DSA/SHA1 Signatu                                                                                        re, key ID 5072e1f5: NOKEY
+Preparing...                          ################################# [100%]
+Updating / installing...
+   1:mysql57-community-release-el7-11 ################################# [100%]
+[hadoop@client1 ~]$ cd /etc/yum.repos.d/
+[hadoop@client1 yum.repos.d]$ ll
+total 12
+-rw-r--r-- 1 root root   64 Sep 17 15:45 base.repo
+-rw-r--r-- 1 root root 1838 Apr 27 05:14 mysql-community.repo
+-rw-r--r-- 1 root root 1885 Apr 27 05:14 mysql-community-source.repo
+
+[hadoop@client1 yum.repos.d]$ yum repolist  (flash the repo "yum clean all")
+Loaded plugins: fastestmirror
+mysql-connectors-community                               | 2.5 kB     00:00
+mysql-tools-community                                    | 2.5 kB     00:00
+mysql57-community                                        | 2.5 kB     00:00
+(1/3): mysql-connectors-community/x86_64/primary_db        |  16 kB   00:03
+(2/3): mysql-tools-community/x86_64/primary_db             |  35 kB   00:07
+(3/3): mysql57-community/x86_64/primary_db                 | 116 kB   00:07
+Determining fastest mirrors
+repo id                                 repo name                         status
+Centos7                                 Centos-server 7.0                 3,576
+mysql-connectors-community/x86_64       MySQL Connectors Community           42
+mysql-tools-community/x86_64            MySQL Tools Community                51
+mysql57-community/x86_64                MySQL 5.7 Community Server          207
+repolist: 3,876
+
+[hadoop@client1 yum.repos.d]$ sudo yum install mysql-server
+Loaded plugins: fastestmirror
+Centos7                                                  | 3.6 kB     00:00
+mysql-connectors-community                               | 2.5 kB     00:00
+mysql-tools-community                                    | 2.5 kB     00:00
+mysql57-community                                        | 2.5 kB     00:00
+(1/3): mysql-connectors-community/x86_64/primary_db        |  16 kB   00:01
+(2/3): mysql-tools-community/x86_64/primary_db             |  35 kB   00:01
+(3/3): mysql57-community/x86_64/primary_db                 | 116 kB   00:02
+Loading mirror speeds from cached hostfile
+Resolving Dependencies
+--> Running transaction check
+---> Package mysql-community-server.x86_64 0:5.7.19-1.el7 will be installed
+   ......
+   ....
+   .....
+     perl-threads.x86_64 0:1.87-4.el7
+  perl-threads-shared.x86_64 0:1.43-6.el7
+
+Replaced:
+  mariadb-libs.x86_64 1:5.5.41-2.el7_0
+
+Complete!
+
+[hadoop@client1 yum.repos.d]$ sudo systemctl start mysqld             (enable mysql service)
+[hadoop@client1 yum.repos.d]$ sudo systemctl status mysqld			   (check the mysql service)
+mysqld.service - MySQL Server
+   Loaded: loaded (/usr/lib/systemd/system/mysqld.service; enabled)
+   Active: active (running) since Fri 2017-09-22 19:31:11 EDT; 2s ago
+     Docs: man:mysqld(8)
+           http://dev.mysql.com/doc/refman/en/using-systemd.html
+  Process: 9129 ExecStart=/usr/sbin/mysqld --daemonize --pid-file=/var/run/mysqld/mysqld.pid $MYSQLD_OPTS (code=exited, status=0/SUCCESS)
+  Process: 9056 ExecStartPre=/usr/bin/mysqld_pre_systemd (code=exited, status=0/SUCCESS)
+ Main PID: 9133 (mysqld)
+   CGroup: /system.slice/mysqld.service
+           └─9133 /usr/sbin/mysqld --daemonize --pid-file=/var/run/mysqld/mys...
+
+Sep 22 19:31:07 client1.example.com systemd[1]: Starting MySQL Server...
+Sep 22 19:31:11 client1.example.com systemd[1]: Started MySQL Server.
+
+--CHECK THE TEMPRORY PASSWORD OF MYSQL SERVER.
+------------------------------------------------
+[hadoop@client1 yum.repos.d]$ sudo grep 'temporary password' /var/log/mysqld.log
+2017-09-22T23:31:07.600985Z 1 [Note] A temporary password is generated for root@localhost: Ck,4eOXdnQTp
+[hadoop@client1 yum.repos.d]$ sudo mysql_secure_installation   (change the mysql password and other access)
+[hadoop@client1 yum.repos.d]$ mysqladmin -u root -p version   (check mysql is working properly or not)
+Enter password:
+mysqladmin  Ver 8.42 Distrib 5.7.19, for Linux on x86_64
+Copyright (c) 2000, 2017, Oracle and/or its affiliates. All rights reserved.
+
+Oracle is a registered trademark of Oracle Corporation and/or its
+affiliates. Other names may be trademarks of their respective
+owners.
+
+Server version          5.7.19
+Protocol version        10
+Connection              Localhost via UNIX socket
+UNIX socket             /var/lib/mysql/mysql.sock
+Uptime:                 6 min 23 sec
+
+Threads: 1  Questions: 18  Slow queries: 0  Opens: 121  Flush tables: 1  Open tables: 114  Queries per second avg: 0.046
+[hadoop@client1 yum.repos.d]$ mysql -u root -p
+Enter password:
+Welcome to the MySQL monitor.  Commands end with ; or \g.
+Your MySQL connection id is 9
+Server version: 5.7.19 MySQL Community Server (GPL)
+
+Copyright (c) 2000, 2017, Oracle and/or its affiliates. All rights reserved.
+
+Oracle is a registered trademark of Oracle Corporation and/or its
+affiliates. Other names may be trademarks of their respective
+owners.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+mysql> show databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| mysql              |
+| performance_schema |
+| sys                |
++--------------------+
+4 rows in set (0.00 sec)
+
+mysql> exit
+Bye
+[hadoop@client1 yum.repos.d]$
+
+download mysql connector jar and untar it and copy mysql-connector-java-5.1.44-bin.jar in
+tar -xvf mysql-connector-java-5.1.44.tar.gz 
+hadoop/hive/lib/
+cp mysq-connector-java-/mysql-connector-java-5.1.44-bin.jar /home/hadoop/hive/lib/ 
+
+create new file /home/hadoop/hive/conf/hive-site.xml
+[hadoop@client1 ~]$ pwd
+/home/hadoop
+[hadoop@client1 ~]$ cat hive/conf/hive-site.xml
+<configuration>
+<property>
+        <name>hive.metastore.local</name>
+        <value>true</value>
+</property>
+<property>
+        <name>javax.jdo.option.ConnectionURL</name>
+        <value>jdbc:mysql://client1.example.com:3306/metastore_db?createDatabaseIfNotExist=true&amp;useSSL=false</value>
+        <description>metadata is stored in a MySQL server</description>
+</property>
+<property>
+        <name>javax.jdo.option.ConnectionDriverName</name>
+        <value>com.mysql.jdbc.Driver</value>
+        <description>MySQL JDBC driver class</description>
+</property>
+<property>
+        <name>javax.jdo.option.ConnectionUserName</name>
+        <value>hadoop</value>
+        <description>user name for connecting to mysql server </description>
+</property>
+<property>
+        <name>javax.jdo.option.ConnectionPassword</name>
+        <value>Hadoop@123</value>
+        <description>password for connecting to mysql server </description>
+</property>
+</configuration>
+[hadoop@client1 ~]$
+
+Start hive Server
+===================
+
+hive  --service hiveserver2 &
+[hadoop@client1 ~]$ jps   (hive thrift (or jvm ) server will start)
+6374 RunJar
+7709 Jps
+[hadoop@client1 ~]$
+
+Go to Mysql prompt.
+[hadoop@client1 ~]$ mysql -u root -p
+Enter password:
+Welcome to the MySQL monitor.  Commands end with ; or \g.
+Your MySQL connection id is 345
+Server version: 5.7.19 MySQL Community Server (GPL)
+
+Copyright (c) 2000, 2017, Oracle and/or its affiliates. All rights reserved.
+
+Oracle is a registered trademark of Oracle Corporation and/or its
+affiliates. Other names may be trademarks of their respective
+owners.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+mysql> show databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema           |
+| performance_schema |
+| sys                |
++--------------------+
+mysql> CREATE DATABASE metastore_db;     (create the database if database is not available)
+Query OK, 1 row affected (0.00 sec)
+
+mysql> CREATE USER 'hadoop'@'%' IDENTIFIED BY 'Hadoop@123';   ( if user is not created)
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> GRANT all on *.* to 'hadoop'@client1.example.com identified by 'Hadoop@123';    ( give all permissison to hadoop user)
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> flush privileges;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> use metastore_db;
+Reading table information for completion of table and column names
+You can turn off this feature to get a quicker startup with -A
+
+Database changed
+mysql> show tables;
++---------------------------+
+| Tables_in_metastore_db    |
++---------------------------+
+| BUCKETING_COLS            |
+| CDS                       |
+| COLUMNS_V2                |
+| DATABASE_PARAMS           |
+| DBS                       |
+| PARTITION_KEYS            |
+| SDS                       |
+| SD_PARAMS                 |
+| SEQUENCE_TABLE            |
+| SERDES                    |
+| SERDE_PARAMS              |
+| SKEWED_COL_NAMES          |
+| SKEWED_COL_VALUE_LOC_MAP  |
+| SKEWED_STRING_LIST        |
+| SKEWED_STRING_LIST_VALUES |
+| SKEWED_VALUES             |
+| SORT_COLS                 |
+| TABLE_PARAMS              |
+| TBLS                      |
+| VERSION                   |
++---------------------------+
+20 rows in set (0.00 sec)
+
+mysql> show databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| employee           |
+| metastore_db       |
+| mysql              |
+| |
++--------------------+
+5 rows in set (0.00 sec)
+-----------------------------------------------------------------------------------------------------------------------------
+go to in hive prompt ( or any system where hive is working) now create the database and tables or import the data.
+Hive> CREATE DATABASE test_hive_db;
+hive> use test_hive_db
+Creating Hive Tables
+==================
+hive> CREATE TABLE pokes (foo INT, bar STRING);
+
+hive> LOAD DATA LOCAL INPATH './examples/files/kv1.txt' OVERWRITE INTO TABLE pokes;
+creates a table called pokes with two columns, the first being an integer and the other a string.
+
+hive> show tables;
+OK
+pokes
+pokes1
+Time taken: 0.086 seconds, Fetched: 2 row(s)
+hive>
+-------------------------------------------------------------------------------------------------------------------------------
+check the metadata which are created in mysql.
+show databases;
+use metastore_db;
+show tables;
+mysql> select * from TBLS;
++--------+-------------+-------+------------------+--------+-----------+-------+----------+---------------+--------------------+--------------------+
+| TBL_ID | CREATE_TIME | DB_ID | LAST_ACCESS_TIME | OWNER  | RETENTION | SD_ID | TBL_NAME | TBL_TYPE      | VIEW_EXPANDED_TEXT | VIEW_ORIGINAL_TEXT |
++--------+-------------+-------+------------------+--------+-----------+-------+----------+---------------+--------------------+--------------------+
+|      1 |  1507132109 |     6 |                0 | hadoop |         0 |     1 | pokes    | MANAGED_TABLE | NULL               | NULL               |
+|      6 |  1507132776 |     6 |                0 | hadoop |         0 |     6 | pokes1   | MANAGED_TABLE | NULL               | NULL               |
++--------+-------------+-------+------------------+--------+-----------+-------+----------+---------------+--------------------+--------------------+
+2 rows in set (0.00 sec)
+
+mysql>
+------------------------------------------------------------------------------------------------------------------------------------
+check in hdfs end all the data are store in given (location mention in hive-default.xml) location.
+metadata will be in mysql and all the data will store in hdfs.
+[hadoop@dnode1 ~]$ hdfs dfs -ls /user/hive/warehouse/test_hive_db.db
+Found 2 items
+drwxrwxrwx   - hadoop supergroup          0 2017-10-04 11:50 /user/hive/warehouse/test_hive_db.db/pokes
+drwxrwxrwx   - hadoop supergroup          0 2017-10-04 12:00 /user/hive/warehouse/test_hive_db.db/pokes1
+[hadoop@dnode1 ~]$
+================================================================================================================
+
+HBASE:-
+
+set the path. in .bash_profile
+set the java home path and heap size in hbase-env file.
+
+vi hbase-site.xml
+<configuration>
+<property>
+<name>hbase.rootdir</name>
+<value>file://home/hadoop/hdata</value>
+</property>
+<property>
+<name>hbase.zookeeper.property.dataDir</name>
+<value>/home/hadoop/zookeeper</value>
+</property>
+</configuration>
+$ start-hbase.sh
+jps  (hmaster will start)
+hbase shell
+
+create 'class', 'cf'
+
+put 'class', 'row1', 'cf:a', 'value1'
+put 'class', 'row2', 'cf:b', 'value2'
+put 'class', 'row3', 'cf:c', 'value3'
+scan 'class'
+
+put 'test', 'row1', 'cf:a', 'value1'
+put 'test', 'row3', 'cf:c', 'value3'
+scan 'test'
+
+stop-hbase   (stopping hbase server)
+-------------------------------------------------------------------
+open hbase-site.xml file.
+<configuration>
+<property>
+<name>hbase.rootdir</name>
+<value>hdfs://nn1.example.com:9000/hbase</value>
+</property>
+
+<property>
+<name>hbase.cluster.distributed</name>
+<value>true</value>
+</property>
+
+<property>
+<name>hbase.zookeeper.quorum</name>
+<value>dnode1.example.com,dnode2.example.com,dnode3.example.com</value>
+</property>
+</configuration>
+
+Copy this file in all nodes.
+set the path in bashprofile and hbase-env file
+
+go to hbase master node
+
+start-hbase.sh 
+jps
+start qoram.
+stop-hbase.sh
+vi regionservers
+name the server where quarom will run.
+start-hbase.sh
